@@ -14,6 +14,110 @@ export type Database = {
   }
   public: {
     Tables: {
+      item_media: {
+        Row: {
+          created_at: string
+          file_path: string
+          file_type: string
+          id: string
+          item_id: string
+        }
+        Insert: {
+          created_at?: string
+          file_path: string
+          file_type: string
+          id?: string
+          item_id: string
+        }
+        Update: {
+          created_at?: string
+          file_path?: string
+          file_type?: string
+          id?: string
+          item_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "item_media_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      items: {
+        Row: {
+          buyer_id: string | null
+          category: string
+          condition: string
+          created_at: string
+          current_branch: string | null
+          final_payout: number | null
+          id: string
+          processed_by: string | null
+          repair_cost: number | null
+          seller_id: string
+          seller_quoted_price: number
+          selling_price: number | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          buyer_id?: string | null
+          category: string
+          condition: string
+          created_at?: string
+          current_branch?: string | null
+          final_payout?: number | null
+          id?: string
+          processed_by?: string | null
+          repair_cost?: number | null
+          seller_id: string
+          seller_quoted_price: number
+          selling_price?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          buyer_id?: string | null
+          category?: string
+          condition?: string
+          created_at?: string
+          current_branch?: string | null
+          final_payout?: number | null
+          id?: string
+          processed_by?: string | null
+          repair_cost?: number | null
+          seller_id?: string
+          seller_quoted_price?: number
+          selling_price?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          full_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          full_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
