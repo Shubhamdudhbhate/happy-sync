@@ -14,107 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
-      item_media: {
+      user_roles: {
         Row: {
-          created_at: string | null
-          file_path: string
-          file_type: string
+          created_at: string
           id: string
-          item_id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
         }
         Insert: {
-          created_at?: string | null
-          file_path: string
-          file_type: string
+          created_at?: string
           id?: string
-          item_id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
         }
         Update: {
-          created_at?: string | null
-          file_path?: string
-          file_type?: string
+          created_at?: string
           id?: string
-          item_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "item_media_item_id_fkey"
-            columns: ["item_id"]
-            isOneToOne: false
-            referencedRelation: "items"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      items: {
-        Row: {
-          buyer_id: string | null
-          category: string
-          condition: string
-          created_at: string | null
-          current_branch: string | null
-          final_payout: number | null
-          id: string
-          processed_by: string | null
-          repair_cost: number | null
-          seller_id: string
-          seller_quoted_price: number
-          selling_price: number | null
-          status: string
-          updated_at: string | null
-        }
-        Insert: {
-          buyer_id?: string | null
-          category: string
-          condition: string
-          created_at?: string | null
-          current_branch?: string | null
-          final_payout?: number | null
-          id?: string
-          processed_by?: string | null
-          repair_cost?: number | null
-          seller_id: string
-          seller_quoted_price: number
-          selling_price?: number | null
-          status?: string
-          updated_at?: string | null
-        }
-        Update: {
-          buyer_id?: string | null
-          category?: string
-          condition?: string
-          created_at?: string | null
-          current_branch?: string | null
-          final_payout?: number | null
-          id?: string
-          processed_by?: string | null
-          repair_cost?: number | null
-          seller_id?: string
-          seller_quoted_price?: number
-          selling_price?: number | null
-          status?: string
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
-      profiles: {
-        Row: {
-          created_at: string | null
-          full_name: string | null
-          id: string
-          updated_at: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          full_name?: string | null
-          id: string
-          updated_at?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          full_name?: string | null
-          id?: string
-          updated_at?: string | null
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
         }
         Relationships: []
       }
@@ -123,10 +40,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "user" | "official"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -253,6 +176,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["user", "official"],
+    },
   },
 } as const
