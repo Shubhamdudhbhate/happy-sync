@@ -20,10 +20,11 @@ export const useAuth = () => {
           const { data: roleData } = await supabase
             .from("user_roles")
             .select("role")
-            .eq("user_id", session.user.id)
-            .single();
+            .eq("user_id", session.user.id);
 
-          setUserRole(roleData?.role ?? null);
+          // Prioritize official role if user has multiple roles
+          const role = roleData?.find(r => r.role === "official")?.role || roleData?.[0]?.role || null;
+          setUserRole(role);
         } else {
           setUserRole(null);
         }
@@ -40,10 +41,11 @@ export const useAuth = () => {
         const { data: roleData } = await supabase
           .from("user_roles")
           .select("role")
-          .eq("user_id", session.user.id)
-          .single();
+          .eq("user_id", session.user.id);
 
-        setUserRole(roleData?.role ?? null);
+        // Prioritize official role if user has multiple roles
+        const role = roleData?.find(r => r.role === "official")?.role || roleData?.[0]?.role || null;
+        setUserRole(role);
       }
       
       setLoading(false);
