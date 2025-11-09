@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Upload, X } from "lucide-react";
+import { Upload, X, Wallet } from "lucide-react";
+import { getExchangeRate, rsToEth, formatEthAmount } from "@/lib/crypto";
 
 const SellItemForm = () => {
   const { user } = useAuth();
@@ -16,6 +17,32 @@ const SellItemForm = () => {
   const [condition, setCondition] = useState("");
   const [price, setPrice] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [exchangeRate, setExchangeRate] = useState(250000);
+  const [estimatedEth, setEstimatedEth] = useState(0);
+
+  useEffect(() => {
+    fetchExchangeRate();
+  }, []);
+
+  useEffect(() => {
+    if (price) {
+      const priceNum = parseFloat(price);
+      if (!isNaN(priceNum)) {
+        setEstimatedEth(rsToEth(priceNum, exchangeRate));
+      }
+    } else {
+      setEstimatedEth(0);
+    }
+  }, [price, exchangeRate]);
+
+  const fetchExchangeRate = async () => {
+    try {
+      const rate = await getExchangeRate();
+      setExchangeRate(rate);
+    } catch (error) {
+      console.error("Error fetching exchange rate:", error);
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -71,8 +98,9 @@ const SellItemForm = () => {
       setCondition("");
       setPrice("");
       setFiles([]);
-    } catch (error: any) {
-      toast.error(error.message || "Error submitting item");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Error submitting item";
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -125,6 +153,13 @@ const SellItemForm = () => {
               min="0"
               step="0.01"
             />
+            {estimatedEth > 0 && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-2 rounded-md">
+                <Wallet className="w-4 h-4" />
+                <span>Estimated: {formatEthAmount(estimatedEth)} ETH</span>
+                <span className="text-xs">(1 ETH = Rs {exchangeRate.toLocaleString()})</span>
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">

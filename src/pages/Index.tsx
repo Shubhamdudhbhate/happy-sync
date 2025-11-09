@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { LogOut, Loader2 } from "lucide-react";
 import UserDashboard from "@/components/UserDashboard";
 import OfficialDashboard from "@/components/OfficialDashboard";
+import MigrationBanner from "@/components/MigrationBanner";
 
 const Index = () => {
   const { user, loading, userRole, signOut } = useAuth();
@@ -24,18 +25,20 @@ const Index = () => {
     );
   }
 
-  if (!user || !userRole) {
+  if (!user) {
     return null;
   }
 
   return (
     <div className="min-h-screen bg-background">
+      <MigrationBanner />
+      
       <header className="border-b bg-card shadow-sm">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">E-Waste Management</h1>
             <p className="text-sm text-muted-foreground">
-              {userRole === "user" ? "User Portal" : "Official Portal"}
+              {userRole === "official" ? "Official Portal" : "User Portal"}
             </p>
           </div>
           <Button variant="outline" onClick={signOut}>
@@ -46,7 +49,7 @@ const Index = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        {userRole === "user" ? <UserDashboard /> : <OfficialDashboard />}
+        {userRole === "official" ? <OfficialDashboard /> : <UserDashboard />}
       </main>
     </div>
   );

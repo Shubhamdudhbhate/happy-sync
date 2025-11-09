@@ -4,15 +4,18 @@ import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Image as ImageIcon } from "lucide-react";
+import { Loader2, Image as ImageIcon, Wallet, AlertCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { getExchangeRate, simulatePurchaseTransaction, logCryptoTransaction, COMPANY_WALLET_ADDRESS } from "@/lib/crypto";
 
 interface Item {
   id: string;
   category: string;
   condition: string;
   selling_price: number;
+  selling_price_eth: number;
   created_at: string;
 }
 
@@ -29,9 +32,15 @@ const BrowseItems = () => {
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [mediaFiles, setMediaFiles] = useState<ItemMedia[]>([]);
   const [mediaUrls, setMediaUrls] = useState<string[]>([]);
+  const [exchangeRate, setExchangeRate] = useState(250000);
+  const [buyerWallet, setBuyerWallet] = useState("");
+  const [isBuyerVerified, setIsBuyerVerified] = useState(false);
+  const [purchasing, setPurchasing] = useState(false);
 
   useEffect(() => {
     fetchItems();
+    fetchUserWallet();
+    fetchExchangeRate();
 
     const channel = supabase
       .channel("browse-items")
@@ -51,7 +60,28 @@ const BrowseItems = () => {
     return () => {
       supabase.removeChannel(channel);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const fetchExchangeRate = async () => {
+    const rate = await getExchangeRate();
+    setExchangeRate(rate);
+  };
+
+  const fetchUserWallet = async () => {
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("profiles")
+      .select("wallet_address, is_crypto_verified")
+      .eq("id", user.id)
+      .single();
+
+    if (data) {
+      setBuyerWallet(data.wallet_address || "");
+      setIsBuyerVerified(data.is_crypto_verified || false);
+    }
+  };
 
   const fetchItems = async () => {
     const { data, error } = await supabase
@@ -96,9 +126,43 @@ const BrowseItems = () => {
       return;
     }
 
+    // Validate buyer has verified wallet
+    if (!isBuyerVerified || !buyerWallet) {
+      toast.error("You must have a verified crypto wallet to make purchases. Please update your profile.");
+      return;
+    }
+
+    setPurchasing(true);
+
     try {
-      console.log("Attempting to purchase item:", itemId, "by user:", user.id);
+      // Get item details
+      const { data: itemData, error: itemError } = await supabase
+        .from("items")
+        .select("*")
+        .eq("id", itemId)
+        .single();
+
+      if (itemError || !itemData) {
+        throw new Error("Failed to fetch item details");
+      }
+
+      const sellingPriceRs = itemData.selling_price;
+      const sellingPriceEth = itemData.selling_price_eth;
+
+      // Simulate crypto purchase transaction
+      toast.info("Initiating crypto payment transaction...");
       
+      let transactionHash;
+      try {
+        transactionHash = await simulatePurchaseTransaction(buyerWallet, sellingPriceEth);
+        toast.success("Crypto payment transaction confirmed!");
+      } catch (txError) {
+        const errorMessage = txError instanceof Error ? txError.message : "Unknown error";
+        toast.error(`Crypto transaction failed: ${errorMessage}`);
+        throw new Error("Crypto payment failed");
+      }
+
+      // Update item status
       const { data, error } = await supabase
         .from("items")
         .update({
@@ -107,8 +171,6 @@ const BrowseItems = () => {
         })
         .eq("id", itemId)
         .select();
-
-      console.log("Purchase result:", { data, error });
 
       if (error) {
         console.error("Purchase error:", error);
@@ -119,12 +181,27 @@ const BrowseItems = () => {
         throw new Error("Failed to update item. You may not have permission.");
       }
 
-      toast.success("Item purchased successfully!");
+      // Log crypto transaction
+      await logCryptoTransaction(
+        itemId,
+        "purchase",
+        buyerWallet,
+        COMPANY_WALLET_ADDRESS,
+        sellingPriceRs,
+        sellingPriceEth,
+        exchangeRate,
+        transactionHash
+      );
+
+      toast.success("Item purchased successfully with crypto payment!");
       setSelectedItem(null);
       fetchItems();
-    } catch (error: any) {
+    } catch (error) {
       console.error("Purchase failed:", error);
-      toast.error(error.message || "Error purchasing item");
+      const errorMessage = error instanceof Error ? error.message : "Error purchasing item";
+      toast.error(errorMessage);
+    } finally {
+      setPurchasing(false);
     }
   };
 
@@ -146,6 +223,24 @@ const BrowseItems = () => {
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
+      {!isBuyerVerified && (
+        <Card className="border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
+              <div>
+                <p className="font-semibold text-yellow-800 dark:text-yellow-200">
+                  Wallet Verification Required
+                </p>
+                <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+                  You need a verified crypto wallet to purchase items. Please update your wallet in the dashboard.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Search Items</CardTitle>
@@ -189,15 +284,25 @@ const BrowseItems = () => {
                 <p className="text-sm text-muted-foreground">{item.condition}</p>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="text-2xl font-bold text-primary">
-                  Rs {item.selling_price}
+                <div>
+                  <div className="text-2xl font-bold text-primary">
+                    Rs {item.selling_price}
+                  </div>
+                  <div className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
+                    <Wallet className="w-3 h-3" />
+                    {item.selling_price_eth?.toFixed(8) || "0.00000000"} ETH
+                  </div>
                 </div>
                 <Button onClick={() => handleViewItem(item)} className="w-full" variant="outline">
                   <ImageIcon className="w-4 h-4 mr-2" />
                   View Details
                 </Button>
-                <Button onClick={() => handlePurchase(item.id)} className="w-full">
-                  Purchase
+                <Button 
+                  onClick={() => handlePurchase(item.id)} 
+                  className="w-full"
+                  disabled={!isBuyerVerified || purchasing}
+                >
+                  {purchasing ? "Processing..." : "Purchase with Crypto"}
                 </Button>
               </CardContent>
             </Card>
@@ -221,6 +326,10 @@ const BrowseItems = () => {
                 <p className="text-2xl font-bold text-primary">
                   Rs {selectedItem?.selling_price}
                 </p>
+                <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
+                  <Wallet className="w-3 h-3" />
+                  {selectedItem?.selling_price_eth?.toFixed(8) || "0.00000000"} ETH
+                </div>
               </div>
             </div>
             
@@ -241,11 +350,21 @@ const BrowseItems = () => {
               </div>
             )}
             
+            {!isBuyerVerified && (
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded p-3">
+                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                  <AlertCircle className="w-4 h-4 inline mr-1" />
+                  You need a verified wallet to purchase this item
+                </p>
+              </div>
+            )}
+            
             <Button
               onClick={() => selectedItem && handlePurchase(selectedItem.id)}
               className="w-full"
+              disabled={!isBuyerVerified || purchasing}
             >
-              Purchase Item
+              {purchasing ? "Processing Payment..." : "Purchase with Crypto"}
             </Button>
           </div>
         </DialogContent>

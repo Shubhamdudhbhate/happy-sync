@@ -11,43 +11,19 @@ export const useAuth = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-
-        if (session?.user) {
-          const { data: roleData } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", session.user.id);
-
-          // Prioritize official role if user has multiple roles
-          const role = roleData?.find(r => r.role === "official")?.role || roleData?.[0]?.role || null;
-          setUserRole(role);
-        } else {
-          setUserRole(null);
-        }
-        
-        setLoading(false);
-      }
-    );
-
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      setUserRole("user"); // Default to user role
+      setLoading(false);
+    });
 
-      if (session?.user) {
-        const { data: roleData } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", session.user.id);
-
-        // Prioritize official role if user has multiple roles
-        const role = roleData?.find(r => r.role === "official")?.role || roleData?.[0]?.role || null;
-        setUserRole(role);
-      }
-      
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setUserRole("user"); // Default to user role
       setLoading(false);
     });
 

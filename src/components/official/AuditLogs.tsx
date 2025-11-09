@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Package, ShoppingCart, Wrench, Recycle } from "lucide-react";
+import { Loader2, Package, ShoppingCart, Wrench, Recycle, Wallet } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface AuditItem {
@@ -212,9 +212,17 @@ const AuditLogs = () => {
                         </div>
                         <div>
                           <p className="text-muted-foreground">Payout</p>
-                          <p className="font-medium">
-                            {log.item.final_payout > 0 ? `Rs ${log.item.final_payout}` : "-"}
-                          </p>
+                          {log.item.final_payout > 0 ? (
+                            <div>
+                              <p className="font-medium">Rs {log.item.final_payout}</p>
+                              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Wallet className="w-3 h-3" />
+                                {log.item.final_payout_eth?.toFixed(8) || "0.00000000"} ETH
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="font-medium">-</p>
+                          )}
                         </div>
                         <div>
                           <p className="text-muted-foreground">Submitted</p>
@@ -232,15 +240,31 @@ const AuditLogs = () => {
                           </div>
                           <div>
                             <p className="text-muted-foreground">Repair Cost</p>
-                            <p className="font-medium">
-                              {log.item.repair_cost > 0 ? `Rs ${log.item.repair_cost}` : "-"}
-                            </p>
+                            {log.item.repair_cost > 0 ? (
+                              <div>
+                                <p className="font-medium">Rs {log.item.repair_cost}</p>
+                                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Wallet className="w-3 h-3" />
+                                  {log.item.repair_cost_eth?.toFixed(8) || "0.00000000"} ETH
+                                </p>
+                              </div>
+                            ) : (
+                              <p className="font-medium">-</p>
+                            )}
                           </div>
                           <div>
                             <p className="text-muted-foreground">Selling Price</p>
-                            <p className="font-medium">
-                              {log.item.selling_price > 0 ? `Rs ${log.item.selling_price}` : "-"}
-                            </p>
+                            {log.item.selling_price > 0 ? (
+                              <div>
+                                <p className="font-medium">Rs {log.item.selling_price}</p>
+                                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Wallet className="w-3 h-3" />
+                                  {log.item.selling_price_eth?.toFixed(8) || "0.00000000"} ETH
+                                </p>
+                              </div>
+                            ) : (
+                              <p className="font-medium">-</p>
+                            )}
                           </div>
                           <div>
                             <p className="text-muted-foreground">Buyer</p>

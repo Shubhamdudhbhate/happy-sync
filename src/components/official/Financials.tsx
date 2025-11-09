@@ -1,14 +1,21 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DollarSign, TrendingUp, TrendingDown } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { DollarSign, TrendingUp, TrendingDown, Wallet } from "lucide-react";
+import { getExchangeRate, formatDualCurrency } from "@/lib/crypto";
 
 const Financials = () => {
   const [revenue, setRevenue] = useState(0);
+  const [revenueEth, setRevenueEth] = useState(0);
   const [cost, setCost] = useState(0);
+  const [costEth, setCostEth] = useState(0);
   const [profit, setProfit] = useState(0);
+  const [profitEth, setProfitEth] = useState(0);
+  const [exchangeRate, setExchangeRate] = useState(250000);
 
   useEffect(() => {
+    fetchExchangeRate();
     calculateFinancials();
 
     // Subscribe to real-time changes
@@ -32,41 +39,72 @@ const Financials = () => {
     };
   }, []);
 
+  const fetchExchangeRate = async () => {
+    const rate = await getExchangeRate();
+    setExchangeRate(rate);
+  };
+
   const calculateFinancials = async () => {
     const { data: items } = await supabase.from("items").select("*");
 
     if (!items) return;
 
-    let totalRev = 0;
-    let totalCst = 0;
+    let totalRevRs = 0;
+    let totalRevEth = 0;
+    let totalCstRs = 0;
+    let totalCstEth = 0;
 
     items.forEach((item) => {
       // Add payout cost for all acquired items
       if (item.final_payout && item.final_payout > 0) {
-        totalCst += item.final_payout;
+        totalCstRs += item.final_payout;
+        totalCstEth += item.final_payout_eth || 0;
       }
       
       // Add repair cost if exists
       if (item.repair_cost && item.repair_cost > 0) {
-        totalCst += item.repair_cost;
+        totalCstRs += item.repair_cost;
+        totalCstEth += item.repair_cost_eth || 0;
       }
 
       // Add revenue based on status
       if (item.status === "sold" && item.selling_price) {
-        totalRev += item.selling_price;
+        totalRevRs += item.selling_price;
+        totalRevEth += item.selling_price_eth || 0;
       } else if (item.status === "recycled") {
         // Fixed revenue for recycled items
-        totalRev += 150;
+        totalRevRs += 150;
+        totalRevEth += item.selling_price_eth || 0;
       }
     });
 
-    setRevenue(totalRev);
-    setCost(totalCst);
-    setProfit(totalRev - totalCst);
+    setRevenue(totalRevRs);
+    setRevenueEth(totalRevEth);
+    setCost(totalCstRs);
+    setCostEth(totalCstEth);
+    setProfit(totalRevRs - totalCstRs);
+    setProfitEth(totalRevEth - totalCstEth);
   };
 
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Wallet className="w-5 h-5" />
+            Exchange Rate
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">
+            1 ETH = Rs {exchangeRate.toLocaleString()}
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            Current conversion rate for all transactions
+          </p>
+        </CardContent>
+      </Card>
+
       <div className="grid gap-6 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -74,8 +112,16 @@ const Financials = () => {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">Rs {revenue.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">Sales + Recycling</p>
+            <div className="space-y-2">
+              <div className="text-2xl font-bold text-green-600">
+                Rs {revenue.toFixed(2)}
+              </div>
+              <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                <Wallet className="w-3 h-3" />
+                {revenueEth.toFixed(8)} ETH
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">Sales + Recycling</p>
           </CardContent>
         </Card>
 
@@ -85,8 +131,16 @@ const Financials = () => {
             <TrendingDown className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">Rs {cost.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">Payouts + Repairs</p>
+            <div className="space-y-2">
+              <div className="text-2xl font-bold text-orange-600">
+                Rs {cost.toFixed(2)}
+              </div>
+              <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                <Wallet className="w-3 h-3" />
+                {costEth.toFixed(8)} ETH
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">Payouts + Repairs</p>
           </CardContent>
         </Card>
 
@@ -96,10 +150,16 @@ const Financials = () => {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${profit >= 0 ? "text-green-600" : "text-red-600"}`}>
-              Rs {profit.toFixed(2)}
+            <div className="space-y-2">
+              <div className={`text-2xl font-bold ${profit >= 0 ? "text-green-600" : "text-red-600"}`}>
+                Rs {profit.toFixed(2)}
+              </div>
+              <div className={`flex items-center gap-1 text-sm ${profitEth >= 0 ? "text-green-600" : "text-red-600"}`}>
+                <Wallet className="w-3 h-3" />
+                {profitEth.toFixed(8)} ETH
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">Revenue - Cost</p>
+            <p className="text-xs text-muted-foreground mt-2">Revenue - Cost</p>
           </CardContent>
         </Card>
       </div>
@@ -116,7 +176,7 @@ const Financials = () => {
             </div>
             <div className="flex justify-between py-2 border-b">
               <span className="text-muted-foreground">Items Recycled:</span>
-              <span className="font-medium">Rs 150 each</span>
+              <span className="font-medium">Rs 1500 each</span>
             </div>
             <div className="flex justify-between py-2 border-b">
               <span className="text-muted-foreground">Total Payouts:</span>

@@ -25,7 +25,12 @@ const WorkerInterface = () => {
       return;
     }
 
-    const processData: any = {
+    const processData: {
+      finalPayout: number;
+      decision: string;
+      repairCost?: number;
+      sellingPrice?: number;
+    } = {
       finalPayout: parseFloat(finalPayout),
       decision,
     };

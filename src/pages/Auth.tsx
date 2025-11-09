@@ -7,12 +7,41 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Recycle, Shield } from "lucide-react";
+import { Recycle, Shield, Wallet } from "lucide-react";
+import { validateWalletAddress, connectMetaMask, isMetaMaskInstalled } from "@/lib/crypto";
 
 const Auth = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [loginType, setLoginType] = useState<"user" | "official">("user");
+  const [walletAddress, setWalletAddress] = useState("");
+  const [isWalletVerified, setIsWalletVerified] = useState(false);
+
+  const handleConnectWallet = async () => {
+    try {
+      if (!isMetaMaskInstalled()) {
+        toast.error("MetaMask is not installed. Please install MetaMask extension.");
+        window.open("https://metamask.io/download/", "_blank");
+        return;
+      }
+
+      const address = await connectMetaMask();
+      if (address) {
+        setWalletAddress(address);
+        const isValid = validateWalletAddress(address);
+        setIsWalletVerified(isValid);
+        
+        if (isValid) {
+          toast.success("Wallet connected and verified!");
+        } else {
+          toast.error("Invalid wallet address format");
+        }
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to connect wallet";
+      toast.error(errorMessage);
+    }
+  };
 
   const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -31,23 +60,17 @@ const Auth = () => {
           data: {
             full_name: fullName,
           },
-          emailRedirectTo: `${window.location.origin}/`,
         },
       });
 
       if (error) throw error;
 
       if (data.user) {
-        await supabase.from("user_roles").insert({
-          user_id: data.user.id,
-          role: loginType,
-        });
-
-        toast.success("Account created successfully!");
-        navigate("/");
+        toast.success("Account created! Please sign in.");
       }
-    } catch (error: any) {
-      toast.error(error.message || "Error creating account");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Error creating account";
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -62,52 +85,18 @@ const Auth = () => {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) throw error;
 
-      // Check if user has any role
-      const { data: existingRoles } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", data.user.id);
-
-      // If user has no role, create one based on selected login type
-      if (!existingRoles || existingRoles.length === 0) {
-        const { error: insertError } = await supabase
-          .from("user_roles")
-          .insert({
-            user_id: data.user.id,
-            role: loginType,
-          });
-
-        if (insertError) {
-          await supabase.auth.signOut();
-          toast.error("Error setting up account. Please try again.");
-          return;
-        }
-
-        toast.success("Account setup complete!");
-        navigate("/");
-        return;
-      }
-
-      // Check if user has the specific role they're trying to log in with
-      const hasRequestedRole = existingRoles.some(r => r.role === loginType);
-
-      if (!hasRequestedRole) {
-        await supabase.auth.signOut();
-        toast.error(`You don't have ${loginType} access. Please select the correct login type.`);
-        return;
-      }
-
       toast.success("Signed in successfully!");
       navigate("/");
-    } catch (error: any) {
-      toast.error(error.message || "Error signing in");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Error signing in";
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -220,6 +209,37 @@ const Auth = () => {
                       minLength={6}
                     />
                   </div>
+                  
+                  <div className="space-y-2">
+                    <Label>Crypto Wallet (Optional - for transactions)</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={walletAddress}
+                        placeholder="Connect MetaMask wallet (optional)"
+                        readOnly
+                        className={isWalletVerified ? "border-green-500" : ""}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleConnectWallet}
+                        className="shrink-0"
+                      >
+                        <Wallet className="w-4 h-4 mr-2" />
+                        Connect
+                      </Button>
+                    </div>
+                    {isWalletVerified && (
+                      <p className="text-xs text-green-600 flex items-center gap-1">
+                        <Shield className="w-3 h-3" />
+                        Wallet verified
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      You can add a Sepolia testnet wallet later to participate in transactions
+                    </p>
+                  </div>
+
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? "Creating account..." : "Create Account"}
                   </Button>

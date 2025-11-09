@@ -7,8 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Wallet, AlertCircle } from "lucide-react";
+import { getExchangeRate, convertRsToEth, formatDualCurrency, simulatePayoutTransaction, logCryptoTransaction, COMPANY_WALLET_ADDRESS } from "@/lib/crypto";
 
 interface Item {
   id: string;
@@ -16,6 +18,7 @@ interface Item {
   condition: string;
   seller_quoted_price: number;
   created_at: string;
+  seller_id: string;
 }
 
 interface ItemMedia {
@@ -35,6 +38,9 @@ const PendingItems = () => {
   const [repairCost, setRepairCost] = useState("");
   const [sellingPrice, setSellingPrice] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [exchangeRate, setExchangeRate] = useState(250000);
+  const [sellerWallet, setSellerWallet] = useState("");
+  const [isSellerVerified, setIsSellerVerified] = useState(false);
 
   useEffect(() => {
     fetchItems();
@@ -79,6 +85,22 @@ const PendingItems = () => {
     setRepairCost("");
     setSellingPrice("");
     
+    // Fetch exchange rate
+    const rate = await getExchangeRate();
+    setExchangeRate(rate);
+    
+    // Fetch seller's wallet info
+    const { data: sellerProfile } = await supabase
+      .from("profiles")
+      .select("wallet_address, is_crypto_verified")
+      .eq("id", item.seller_id)
+      .single();
+    
+    if (sellerProfile) {
+      setSellerWallet(sellerProfile.wallet_address || "");
+      setIsSellerVerified(sellerProfile.is_crypto_verified || false);
+    }
+    
     const { data: media } = await supabase
       .from("item_media")
       .select("*")
@@ -103,6 +125,12 @@ const PendingItems = () => {
   const handleProcess = async () => {
     if (!selectedItem || !user) return;
 
+    // Validate seller has verified wallet
+    if (!isSellerVerified || !sellerWallet) {
+      toast.error("Seller does not have a verified crypto wallet. Cannot process payout.");
+      return;
+    }
+
     setProcessing(true);
 
     try {
@@ -124,12 +152,36 @@ const PendingItems = () => {
           break;
       }
 
+      const payoutRs = parseFloat(finalPayout);
+      const payoutEth = convertRsToEth(payoutRs, exchangeRate);
+      const repairCostRs = decision === "refurbish" ? parseFloat(repairCost || "0") : 0;
+      const repairCostEth = convertRsToEth(repairCostRs, exchangeRate);
+      const sellingPriceRs = decision === "refurbish" ? parseFloat(sellingPrice || "0") : (decision === "recycle" ? 150 : 0);
+      const sellingPriceEth = convertRsToEth(sellingPriceRs, exchangeRate);
+
+      // Simulate crypto payout transaction
+      toast.info("Initiating crypto payout transaction...");
+      
+      let transactionHash;
+      try {
+        transactionHash = await simulatePayoutTransaction(sellerWallet, payoutEth);
+        toast.success("Crypto payout transaction confirmed!");
+      } catch (txError) {
+        const errorMessage = txError instanceof Error ? txError.message : "Unknown error";
+        toast.error(`Crypto transaction failed: ${errorMessage}`);
+        throw new Error("Crypto payout failed");
+      }
+
+      // Update item with ETH values
       const { error } = await supabase
         .from("items")
         .update({
-          final_payout: parseFloat(finalPayout),
-          repair_cost: decision === "refurbish" ? parseFloat(repairCost || "0") : 0,
-          selling_price: decision === "refurbish" ? parseFloat(sellingPrice || "0") : (decision === "recycle" ? 150 : 0),
+          final_payout: payoutRs,
+          final_payout_eth: payoutEth,
+          repair_cost: repairCostRs,
+          repair_cost_eth: repairCostEth,
+          selling_price: sellingPriceRs,
+          selling_price_eth: sellingPriceEth,
           status,
           current_branch: currentBranch,
           processed_by: user.id,
@@ -138,11 +190,24 @@ const PendingItems = () => {
 
       if (error) throw error;
 
-      toast.success("Item processed successfully!");
+      // Log crypto transaction
+      await logCryptoTransaction(
+        selectedItem.id,
+        "payout",
+        COMPANY_WALLET_ADDRESS,
+        sellerWallet,
+        payoutRs,
+        payoutEth,
+        exchangeRate,
+        transactionHash
+      );
+
+      toast.success("Item processed successfully with crypto payout!");
       setSelectedItem(null);
       fetchItems();
-    } catch (error: any) {
-      toast.error(error.message || "Error processing item");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Error processing item";
+      toast.error(errorMessage);
     } finally {
       setProcessing(false);
     }
@@ -246,19 +311,56 @@ const PendingItems = () => {
 
             <Card>
               <CardHeader>
+                <CardTitle className="text-base">Seller Wallet Status</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Wallet className="w-4 h-4" />
+                  <span className="text-sm font-mono">{sellerWallet || "No wallet"}</span>
+                  <Badge variant={isSellerVerified ? "default" : "destructive"}>
+                    {isSellerVerified ? "Verified" : "Not Verified"}
+                  </Badge>
+                </div>
+                {!isSellerVerified && (
+                  <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded p-2">
+                    <p className="text-xs text-yellow-800 dark:text-yellow-200">
+                      <AlertCircle className="w-3 h-3 inline mr-1" />
+                      Seller must verify wallet before payout
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Exchange Rate</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm">1 ETH = Rs {exchangeRate.toLocaleString()}</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
                 <CardTitle className="text-base">Valuation & Decision</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Final Payout to Seller (Rs)</Label>
+                  <Label>Final Payout to Seller</Label>
                   <Input
                     type="number"
                     value={finalPayout}
                     onChange={(e) => setFinalPayout(e.target.value)}
-                    placeholder="Enter payout amount"
+                    placeholder="Enter payout amount in Rs"
                     min="0"
                     step="0.01"
                   />
+                  {finalPayout && (
+                    <p className="text-sm text-muted-foreground">
+                      ETH Equivalent: {convertRsToEth(parseFloat(finalPayout), exchangeRate).toFixed(8)} ETH
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -268,7 +370,7 @@ const PendingItems = () => {
                       <SelectValue placeholder="Choose action" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="recycle">Recycle (Fixed Rs 150 revenue)</SelectItem>
+                      <SelectItem value="recycle">Recycle (Avg Rs 1500 revenue)</SelectItem>
                       <SelectItem value="refurbish">Refurbish & Sell</SelectItem>
                       <SelectItem value="scrap">Scrap/Unusable</SelectItem>
                     </SelectContent>

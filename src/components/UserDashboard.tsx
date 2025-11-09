@@ -1,12 +1,14 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Package, ShoppingCart } from "lucide-react";
+import { Package, ShoppingCart, Wallet } from "lucide-react";
 import SellItemForm from "./user/SellItemForm";
 import MyListings from "./user/MyListings";
 import BrowseItems from "./user/BrowseItems";
+import WalletStatus from "./user/WalletStatus";
 
 const UserDashboard = () => {
   return (
     <div className="space-y-6">
+      <WalletStatus />
       <Tabs defaultValue="sell" className="w-full">
         <TabsList className="grid w-full grid-cols-3 max-w-2xl mx-auto">
           <TabsTrigger value="sell" className="flex items-center gap-2">
